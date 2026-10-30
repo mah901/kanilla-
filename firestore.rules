@@ -1,0 +1,44 @@
+rules_version = '2';
+// قواعد Firestore لمشروع Kanilla المستقل
+// انسخ كل هذا الملف والصقه مكان القواعد الموجودة في: Firestore Database ← Rules ← Publish
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null && request.auth.token.email != null; }
+    function email() { return request.auth.token.email.lower(); }
+    function isAdmin() { return signed() && email() == 'men69429@gmail.com'; }
+    function userDoc() { return /databases/$(database)/documents/users/$(email()); }
+    function inBranch(b) { return signed() && exists(userDoc()) && get(userDoc()).data.branch == b; }
+
+    match /settings/{id} {
+      allow read: if signed();
+      allow write: if isAdmin();
+    }
+
+    match /users/{e} {
+      allow read: if isAdmin() || (signed() && email() == e);
+      allow write: if isAdmin();
+    }
+
+    match /branches/{b} {
+      allow read: if isAdmin() || inBranch(b);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (inBranch(b) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['counter']));
+
+      match /{col}/{d} {
+        allow read, write: if isAdmin();
+        allow read, create, update: if inBranch(b) && col in ['products', 'invoices', 'moves', 'expenses', 'returns'];
+        allow delete: if inBranch(b) && col == 'products';
+      }
+    }
+
+    match /suppliers/{d} { allow read, write: if isAdmin(); }
+    match /supplierPayments/{d} { allow read, write: if isAdmin(); }
+    match /customerReceipts/{d} { allow read, write: if isAdmin(); }
+    match /customers/{d} { allow read, write: if isAdmin(); }
+    match /backups/{day} {
+      allow read, write: if isAdmin();
+      match /parts/{p} { allow read, write: if isAdmin(); }
+    }
+  }
+}
